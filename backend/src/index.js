@@ -132,3 +132,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+const path = require('path');
+
+// Frontend-Dateien bereitstellen
+app.use(express.static(path.join(__dirname, '../../frontend')));
