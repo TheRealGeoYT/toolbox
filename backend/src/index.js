@@ -130,7 +130,40 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 });
+// API Route: Ticket Panel über Dashboard erstellen
+app.post('/api/tickets/create-panel', async (req, res) => {
+  const { title, description, channelId, fields } = req.body;
 
+  try {
+    // 1. Kanal auf Discord suchen
+    const channel = await client.channels.fetch(channelId);
+    if (!channel) {
+      return res.status(404).json({ error: 'Kanal nicht gefunden!' });
+    }
+
+    // 2. Embed & Button aufbauen
+    const embed = new EmbedBuilder()
+      .setTitle(title || 'Support-System')
+      .setDescription(description || 'Klicke unten auf den Button, um ein Ticket zu öffnen.')
+      .setColor('#5865F2');
+
+    const button = new ButtonBuilder()
+      .setCustomId('create_ticket')
+      .setLabel('Ticket erstellen')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('📩');
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    // 3. Nachricht im Discord-Kanal posten
+    await channel.send({ embeds: [embed], components: [row] });
+
+    return res.status(200).json({ success: true, message: 'Panel erfolgreich gesendet!' });
+  } catch (error) {
+    console.error('[API Error] Fehler beim Erstellen des Panels:', error);
+    return res.status(500).json({ error: 'Fehler beim Senden des Panels auf Discord.' });
+  }
+});
 client.login(process.env.DISCORD_TOKEN);
 
 // Frontend-Dateien bereitstellen
