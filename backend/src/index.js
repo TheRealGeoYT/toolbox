@@ -132,7 +132,17 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-const path = require('path');
 
 // Frontend-Dateien bereitstellen
 app.use(express.static(path.join(__dirname, '../../frontend')));
+const path = require('path');
+
+// ... dein bestehender Express-Code ...
+
+// Statische Dateien aus dem frontend-Ordner bereitstellen
+app.use(express.static(path.join(__dirname, '../../frontend')));
+
+// Fallback: Alle nicht-API Anfragen auf die index.html leiten
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+});
