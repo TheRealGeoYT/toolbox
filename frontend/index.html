@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ToolBox Dashboard - Multi-Panel Ticket System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head> <body class="bg-slate-900 text-white min-h-screen">
+  <div class="max-w-4xl mx-auto p-6">
+    <header class="mb-8 border-b border-slate-700 pb-4 flex justify-between items-center">
+      <h1 class="text-3xl font-bold text-indigo-400">ToolBox Dashboard</h1>
+      <span class="text-xs bg-indigo-900 text-indigo-200 px-3 py-1 rounded-full">v1.0.0</span>
+    </header>
+
+    <main class="space-y-6">
+      <!-- Panel Konfigurator -->
+      <section class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
+        <h2 class="text-xl font-semibold mb-4 text-indigo-300">Neues Ticket-Panel erstellen</h2>
+        
+        <form id="panelForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Panel Titel</label>
+            <input type="text" id="panelTitle" placeholder="z. B. Support & Hilfe" required
+              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Beschreibung</label>
+            <textarea id="panelDescription" rows="2" placeholder="Klicke unten, um ein Ticket zu öffnen..."
+              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Ziel-Kanal ID (Discord)</label>
+            <input type="text" id="channelId" placeholder="123456789012345678" required
+              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <!-- Formular-Felder Konfiguration -->
+          <div class="border-t border-slate-700 pt-4 mt-4">
+            <h3 class="text-md font-medium mb-2 text-slate-300">Abfrage-Formular für den User (Modal)</h3>
+            <div id="formFieldsContainer" class="space-y-3">
+              <!-- Dynamische Felder werden hier per JS eingefügt -->
+            </div>
+            <button type="button" id="addFieldBtn" class="mt-3 text-sm bg-slate-700 hover:bg-slate-600 text-indigo-300 px-3 py-1.5 rounded transition">
+              + Feld hinzufügen
+            </button>
+          </div>
+
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition shadow-md">
+            Panel auf Discord senden
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
