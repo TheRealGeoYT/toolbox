@@ -15,13 +15,19 @@ const {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Wichtig für HTTPS & Sessions auf Render.com
+app.set('trust proxy', 1);
+
+// Middleware Setup
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'toolbox_secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false }
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 Stunden
+  }
 }));
 
 // Statische Dateien aus dem Frontend bereitstellen
@@ -100,6 +106,10 @@ app.get('/api/guilds', async (req, res) => {
     });
     const userGuilds = await userGuildsRes.json();
 
+    if (!Array.isArray(userGuilds)) {
+      return res.status(500).json({ error: 'Fehler beim Abrufen der Discord-Server' });
+    }
+
     const adminGuilds = userGuilds.filter(g => {
       const perms = BigInt(g.permissions);
       return g.owner || (perms & 0x8n) === 0x8n || (perms & 0x20n) === 0x20n;
@@ -115,6 +125,7 @@ app.get('/api/guilds', async (req, res) => {
 
     res.json(result);
   } catch (err) {
+    console.error('[Guilds Error]', err);
     res.status(500).json({ error: 'Fehler beim Laden der Server' });
   }
 });
@@ -132,6 +143,7 @@ app.get('/api/guilds/:guildId/channels', async (req, res) => {
 
     res.json(channels);
   } catch (err) {
+    console.error('[Channels Error]', err);
     res.status(500).json({ error: 'Konnte Kanäle nicht laden' });
   }
 });
@@ -161,6 +173,7 @@ app.post('/api/tickets/create-panel', async (req, res) => {
     await channel.send({ embeds: [embed], components: [row] });
     res.json({ success: true, message: 'Panel erfolgreich gesendet!' });
   } catch (err) {
+    console.error('[Create Panel Error]', err);
     res.status(500).json({ error: 'Fehler beim Senden des Panels auf Discord.' });
   }
 });
@@ -193,6 +206,7 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `Dein Ticket wurde erstellt: ${ticketChannel}`, flags: 64 });
     } catch (err) {
+      console.error('[Ticket Interaction Error]', err);
       await interaction.reply({ content: 'Fehler beim Erstellen des Ticket-Kanals.', flags: 64 });
     }
   }
