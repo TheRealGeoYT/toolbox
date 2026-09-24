@@ -1,181 +1,214 @@
 require('dotenv').config();
-const { 
-    Client, 
-    GatewayIntentBits, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    ChannelType, 
-    PermissionFlagsBits, 
-    REST, 
-    Routes, 
-    SlashCommandBuilder 
-} = require('discord.js');
+const path = require('path');
 const express = require('express');
+const session = require('express-session');
+const { 
+  Client, 
+  GatewayIntentBits, 
+  EmbedBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  ActionRowBuilder, 
+  PermissionFlagsBits 
+} = require('discord.js');
 
-// 1. Express Webserver Setup (für das spätere Dashboard)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/api/status', (req, res) => {
-    res.json({ status: 'ToolBox Backend läuft online!', botReady: client.isReady() });
-});
+// Middleware
+app.use(express.json());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'toolbox_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false }
+}));
 
-app.listen(PORT, () => {
-    console.log(`[Express] Webserver läuft auf Port ${PORT}`);
-});
+// Statische Dateien aus dem Frontend bereitstellen
+app.use(express.static(path.join(__dirname, '../../frontend')));
 
-// 2. Discord Bot Setup
+// Discord Bot Client initialisieren
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-// Slash-Command Definition für das Ticket-System
-const commands = [
-    new SlashCommandBuilder()
-        .setName('setup-tickets')
-        .setDescription('Sendet das Ticket-Panel in den aktuellen Kanal')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-].map(command => command.toJSON());
+// --- AUTHENTIFIZIERUNG (DISCORD OAUTH2) ---
 
-// Bot Start & Command Registration
-client.once('ready', async () => {
-    console.log(`[Discord] ToolBox ist eingeloggt als ${client.user.tag}`);
-
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        console.log('[Discord] Registriere Slash-Commands...');
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: commands }
-        );
-        console.log('[Discord] Slash-Commands erfolgreich registriert!');
-    } catch (error) {
-        console.error('[Discord] Fehler beim Registrieren der Commands:', error);
-    }
+app.get('/api/auth/login', (req, res) => {
+  const redirectUri = encodeURIComponent(process.env.REDIRECT_URI);
+  const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify%20guilds`;
+  res.redirect(authorizeUrl);
 });
 
-// Interaktions-Handling (Commands & Buttons)
-client.on('interactionCreate', async (interaction) => {
-    // 1. Befehl: /setup-tickets
-    if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'setup-tickets') {
-            const button = new ButtonBuilder()
-                .setCustomId('create_ticket')
-                .setLabel('📩 Ticket erstellen')
-                .setStyle(ButtonStyle.Primary);
-
-            const row = new ActionRowBuilder().addComponents(button);
-
-            await interaction.reply({
-                content: '### 🛠️ ToolBox Support-System\nKlicke auf den Button unten, um ein privates Support-Ticket zu öffnen!',
-                components: [row]
-            });
-        }
-    }
-
-    // 2. Button-Klick: "Ticket erstellen" oder "Ticket schließen"
-    if (interaction.isButton()) {
-        // Ticket Kanal erstellen
-        if (interaction.customId === 'create_ticket') {
-            const channelName = `ticket-${interaction.user.username.toLowerCase()}`;
-            
-            // Prüfen, ob bereits ein Ticket-Kanal existiert
-            const existingChannel = interaction.guild.channels.cache.find(c => c.name === channelName);
-            if (existingChannel) {
-                return interaction.reply({ content: `Du hast bereits ein offenes Ticket: ${existingChannel}`, flags: 64 });
-            }
-
-            // Neuen privaten Textkanal erstellen
-            const ticketChannel = await interaction.guild.channels.create({
-                name: channelName,
-                type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    {
-                        id: interaction.guild.id, // @everyone blockieren
-                        deny: [PermissionFlagsBits.ViewChannel]
-                    },
-                    {
-                        id: interaction.user.id, // Ticket-Ersteller erlauben
-                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-                    }
-                ]
-            });
-
-            const closeButton = new ButtonBuilder()
-                .setCustomId('close_ticket')
-                .setLabel('🔒 Ticket schließen')
-                .setStyle(ButtonStyle.Danger);
-
-            const row = new ActionRowBuilder().addComponents(closeButton);
-
-            await ticketChannel.send({
-                content: `Hallo ${interaction.user}, willkommen in deinem Ticket! Beschreibe bitte dein Anliegen.`,
-                components: [row]
-            });
-
-            await interaction.reply({ content: `Dein Ticket wurde erstellt: ${ticketChannel}`, flags: 64 });
-        }
-
-        // Ticket Kanal löschen
-        if (interaction.customId === 'close_ticket') {
-            await interaction.reply('Das Ticket wird in 5 Sekunden geschlossen...');
-            setTimeout(() => {
-                interaction.channel.delete().catch(() => {});
-            }, 5000);
-        }
-    }
-});
-// API Route: Ticket Panel über Dashboard erstellen
-app.post('/api/tickets/create-panel', async (req, res) => {
-  const { title, description, channelId, fields } = req.body;
+app.get('/api/auth/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.redirect('/?error=no_code');
 
   try {
-    // 1. Kanal auf Discord suchen
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      return res.status(404).json({ error: 'Kanal nicht gefunden!' });
-    }
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: process.env.REDIRECT_URI
+      })
+    });
 
-    // 2. Embed & Button aufbauen
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) return res.redirect('/?error=token_failed');
+
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const userData = await userResponse.json();
+
+    req.session.user = userData;
+    req.session.accessToken = tokenData.access_token;
+
+    res.redirect('/');
+  } catch (err) {
+    console.error('[OAuth2 Error]', err);
+    res.redirect('/?error=auth_failed');
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ authenticated: false });
+  res.json({ authenticated: true, user: req.session.user });
+});
+
+app.get('/api/auth/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
+
+// --- SERVER & TICKET API ---
+
+app.get('/api/guilds', async (req, res) => {
+  if (!req.session.accessToken) return res.status(401).json({ error: 'Nicht angemeldet' });
+
+  try {
+    const userGuildsRes = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bearer ${req.session.accessToken}` }
+    });
+    const userGuilds = await userGuildsRes.json();
+
+    const adminGuilds = userGuilds.filter(g => {
+      const perms = BigInt(g.permissions);
+      return g.owner || (perms & 0x8n) === 0x8n || (perms & 0x20n) === 0x20n;
+    });
+
+    const botGuilds = client.guilds.cache;
+    const result = adminGuilds.map(guild => ({
+      id: guild.id,
+      name: guild.name,
+      icon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null,
+      hasBot: botGuilds.has(guild.id)
+    }));
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Server' });
+  }
+});
+
+app.get('/api/guilds/:guildId/channels', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
+
+  try {
+    const guild = await client.guilds.fetch(req.params.guildId);
+    if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
+
+    const channels = guild.channels.cache
+      .filter(c => c.isTextBased() && !c.isThread())
+      .map(c => ({ id: c.id, name: c.name }));
+
+    res.json(channels);
+  } catch (err) {
+    res.status(500).json({ error: 'Konnte Kanäle nicht laden' });
+  }
+});
+
+app.post('/api/tickets/create-panel', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
+
+  const { channelId, title, description, buttonLabel, buttonStyle } = req.body;
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel) return res.status(404).json({ error: 'Kanal nicht gefunden' });
+
     const embed = new EmbedBuilder()
-      .setTitle(title || 'Support-System')
-      .setDescription(description || 'Klicke unten auf den Button, um ein Ticket zu öffnen.')
+      .setTitle(title || 'Support-Tickets')
+      .setDescription(description || 'Klicke unten, um ein privates Support-Ticket zu öffnen.')
       .setColor('#5865F2');
 
     const button = new ButtonBuilder()
       .setCustomId('create_ticket')
-      .setLabel('Ticket erstellen')
-      .setStyle(ButtonStyle.Primary)
+      .setLabel(buttonLabel || 'Ticket erstellen')
+      .setStyle(ButtonStyle[buttonStyle] || ButtonStyle.Primary)
       .setEmoji('📩');
 
     const row = new ActionRowBuilder().addComponents(button);
 
-    // 3. Nachricht im Discord-Kanal posten
     await channel.send({ embeds: [embed], components: [row] });
-
-    return res.status(200).json({ success: true, message: 'Panel erfolgreich gesendet!' });
-  } catch (error) {
-    console.error('[API Error] Fehler beim Erstellen des Panels:', error);
-    return res.status(500).json({ error: 'Fehler beim Senden des Panels auf Discord.' });
+    res.json({ success: true, message: 'Panel erfolgreich gesendet!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Senden des Panels auf Discord.' });
   }
 });
+
+// --- DISCORD INTERAKTIONEN ---
+
+client.on('interactionCreate', async (interaction) => {
+  if (interaction.isButton() && interaction.customId === 'create_ticket') {
+    try {
+      const ticketChannel = await interaction.guild.channels.create({
+        name: `ticket-${interaction.user.username}`,
+        permissionOverwrites: [
+          { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        ]
+      });
+
+      const closeBtn = new ButtonBuilder()
+        .setCustomId('close_ticket')
+        .setLabel('Ticket schließen')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒');
+
+      const row = new ActionRowBuilder().addComponents(closeBtn);
+
+      await ticketChannel.send({
+        content: `Hallo ${interaction.user}, willkommen in deinem Ticket! Beschreibe bitte dein Anliegen.`,
+        components: [row]
+      });
+
+      await interaction.reply({ content: `Dein Ticket wurde erstellt: ${ticketChannel}`, flags: 64 });
+    } catch (err) {
+      await interaction.reply({ content: 'Fehler beim Erstellen des Ticket-Kanals.', flags: 64 });
+    }
+  }
+
+  if (interaction.isButton() && interaction.customId === 'close_ticket') {
+    await interaction.reply('Das Ticket wird in 5 Sekunden gelöscht...');
+    setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+  }
+});
+
+client.once('ready', () => {
+  console.log(`[Discord] Bot ist online als ${client.user.tag}`);
+});
+
 client.login(process.env.DISCORD_TOKEN);
 
-// Frontend-Dateien bereitstellen
-app.use(express.static(path.join(__dirname, '../../frontend')));
-const path = require('path');
-
-// ... dein bestehender Express-Code ...
-
-// Statische Dateien aus dem frontend-Ordner bereitstellen
-app.use(express.static(path.join(__dirname, '../../frontend')));
-
-// Fallback: Alle nicht-API Anfragen auf die index.html leiten
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+app.listen(PORT, () => {
+  console.log(`[Express] Webserver läuft auf Port ${PORT}`);
 });
