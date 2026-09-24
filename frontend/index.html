@@ -3,56 +3,77 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ToolBox Dashboard - Multi-Panel Ticket System</title>
+  <title>ToolBox Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
-</head> <body class="bg-slate-900 text-white min-h-screen">
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
   <div class="max-w-4xl mx-auto p-6">
     <header class="mb-8 border-b border-slate-700 pb-4 flex justify-between items-center">
       <h1 class="text-3xl font-bold text-indigo-400">ToolBox Dashboard</h1>
-      <span class="text-xs bg-indigo-900 text-indigo-200 px-3 py-1 rounded-full">v1.0.0</span>
+      <div id="userProfile" class="flex items-center gap-3">
+        <a href="/api/auth/login" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-medium transition">
+          Mit Discord anmelden
+        </a>
+      </div>
     </header>
 
-    <main class="space-y-6">
-      <!-- Panel Konfigurator -->
-      <section class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
-        <h2 class="text-xl font-semibold mb-4 text-indigo-300">Neues Ticket-Panel erstellen</h2>
+    <main id="dashboardContent" class="hidden space-y-6">
+      <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+        <h2 class="text-xl font-semibold mb-4 text-indigo-300">1. Server auswählen</h2>
+        <div id="guildList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </section>
+
+      <section id="panelSection" class="bg-slate-800 p-6 rounded-xl border border-slate-700 opacity-50 pointer-events-none transition">
+        <h2 class="text-xl font-semibold mb-4 text-indigo-300">2. Ticket-Panel konfigurieren</h2>
         
         <form id="panelForm" class="space-y-4">
           <div>
+            <label class="block text-sm font-medium mb-1">Ziel-Textkanal</label>
+            <select id="channelSelect" required class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+              <option value="">Wähle zuerst einen Server aus...</option>
+            </select>
+          </div>
+
+          <div>
             <label class="block text-sm font-medium mb-1">Panel Titel</label>
-            <input type="text" id="panelTitle" placeholder="z. B. Support & Hilfe" required
-              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+            <input type="text" id="panelTitle" value="Support-Tickets" required class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
           </div>
 
           <div>
             <label class="block text-sm font-medium mb-1">Beschreibung</label>
-            <textarea id="panelDescription" rows="2" placeholder="Klicke unten, um ein Ticket zu öffnen..."
-              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"></textarea>
+            <textarea id="panelDescription" rows="3" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">Klicke unten auf den Button, um ein privates Support-Ticket zu öffnen.</textarea>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium mb-1">Ziel-Kanal ID (Discord)</label>
-            <input type="text" id="channelId" placeholder="123456789012345678" required
-              class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
-          </div>
-
-          <!-- Formular-Felder Konfiguration -->
-          <div class="border-t border-slate-700 pt-4 mt-4">
-            <h3 class="text-md font-medium mb-2 text-slate-300">Abfrage-Formular für den User (Modal)</h3>
-            <div id="formFieldsContainer" class="space-y-3">
-              <!-- Dynamische Felder werden hier per JS eingefügt -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Button Text</label>
+              <input type="text" id="buttonLabel" value="Ticket erstellen" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
             </div>
-            <button type="button" id="addFieldBtn" class="mt-3 text-sm bg-slate-700 hover:bg-slate-600 text-indigo-300 px-3 py-1.5 rounded transition">
-              + Feld hinzufügen
-            </button>
+            <div>
+              <label class="block text-sm font-medium mb-1">Button Farbe</label>
+              <select id="buttonStyle" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                <option value="Primary">Blau (Primary)</option>
+                <option value="Success">Grün (Success)</option>
+                <option value="Secondary">Grau (Secondary)</option>
+                <option value="Danger">Rot (Danger)</option>
+              </select>
+            </div>
           </div>
 
-          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition shadow-md">
-            Panel auf Discord senden
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 font-semibold py-2.5 rounded-lg transition shadow-md">
+            Panel auf Discord absenden
           </button>
         </form>
       </section>
     </main>
+
+    <div id="loginNotice" class="text-center py-20 bg-slate-800 rounded-xl border border-slate-700">
+      <h2 class="text-2xl font-bold mb-2">Willkommen bei ToolBox</h2>
+      <p class="text-slate-400 mb-6">Bitte melde dich mit Discord an, um deine Server und Ticket-Panels zu verwalten.</p>
+      <a href="/api/auth/login" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-semibold transition">
+        Jetzt mit Discord anmelden
+      </a>
+    </div>
   </div>
 
   <script src="app.js"></script>
