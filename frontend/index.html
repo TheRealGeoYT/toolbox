@@ -4,76 +4,180 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ToolBox Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-white min-h-screen">
-  <div class="max-w-4xl mx-auto p-6">
-    <header class="mb-8 border-b border-slate-700 pb-4 flex justify-between items-center">
-      <h1 class="text-3xl font-bold text-indigo-400">ToolBox Dashboard</h1>
-      <div id="userProfile" class="flex items-center gap-3">
-        <a href="/api/auth/login" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-medium transition">
-          Mit Discord anmelden
-        </a>
-      </div>
-    </header>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --sidebar-bg: #111827;
+      --accent: #5865f2;
+      --text: #f8fafc;
+      --subtext: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: var(--bg-dark); color: var(--text); display: flex; min-height: 100vh; }
 
-    <main id="dashboardContent" class="hidden space-y-6">
-      <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-        <h2 class="text-xl font-semibold mb-4 text-indigo-300">1. Server auswählen</h2>
-        <div id="guildList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    /* Layout */
+    .app-container { display: flex; width: 100%; }
+    
+    /* Sidebar */
+    .sidebar { width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; }
+    .brand { font-size: 1.5rem; font-weight: bold; color: var(--accent); margin-bottom: 25px; display: flex; align-items: center; gap: 10px; }
+    
+    .server-selector { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-bottom: 25px; display: flex; align-items: center; gap: 12px; }
+    .server-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-weight: bold; overflow: hidden; }
+    .server-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .server-info h4 { font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 150px; }
+    .server-info span { font-size: 0.75rem; color: #10b981; }
+
+    .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .nav-item button { width: 100%; background: transparent; border: none; color: var(--subtext); padding: 12px 15px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+    .nav-item button:hover, .nav-item button.active { background: var(--accent); color: white; }
+
+    .user-profile { margin-top: auto; padding-top: 15px; border-top: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+    .user-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--subtext); }
+    .verified-icon { color: #38bdf8; }
+
+    /* Main Content */
+    .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+    
+    .card { background: var(--card-bg); border-radius: 12px; padding: 25px; border: 1px solid #334155; margin-bottom: 20px; }
+    .card h3 { margin-bottom: 15px; font-size: 1.2rem; }
+    
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; font-size: 0.85rem; color: var(--subtext); margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; }
+    
+    .btn { background: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-danger { background: #ef4444; }
+    
+    .hidden { display: none !important; }
+    
+    /* Server List Grid */
+    .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+    .server-card { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; }
+    .server-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- LINKER NAVIGATIONSSAMMLER (SIDEBAR) -->
+    <aside class="sidebar">
+      <div class="brand">🧰 ToolBox</div>
+
+      <!-- Ausgewählter Server Oben -->
+      <div class="server-selector" id="selectedServerDisplay">
+        <div class="server-avatar" id="sidebarServerIcon">?</div>
+        <div class="server-info">
+          <h4 id="sidebarServerName">Kein Server</h4>
+          <span id="sidebarServerStatus">Bitte wählen</span>
+        </div>
+      </div>
+
+      <!-- Module/Navigation -->
+      <ul class="nav-menu">
+        <li class="nav-item"><button id="btnNavServers" class="active" onclick="switchTab('servers')">🌐 Server Auswählen</button></li>
+        <li class="nav-item"><button id="btnNavTickets" onclick="switchTab('tickets')">🎫 Tickets Modul</button></li>
+        <li class="nav-item"><button id="btnNavMod" onclick="switchTab('moderation')">🛡️ Moderation</button></li>
+      </ul>
+
+      <!-- User Account / Status -->
+      <div class="user-profile">
+        <div class="user-badge" id="userInfo">
+          <span>Nicht angemeldet</span>
+        </div>
+        <button id="authBtn" class="btn" style="padding: 5px 10px; font-size: 0.8rem;" onclick="handleAuth()">Login</button>
+      </div>
+    </aside>
+
+    <!-- HAUPTINHALTSBEREICH -->
+    <main class="main-content">
+      
+      <!-- TAB 1: SERVER WÄHLEN -->
+      <section id="tab-servers">
+        <div class="header">
+          <h2>Wähle deinen Server aus</h2>
+        </div>
+        <div class="server-grid" id="serverList">Lade Server...</div>
       </section>
 
-      <section id="panelSection" class="bg-slate-800 p-6 rounded-xl border border-slate-700 opacity-50 pointer-events-none transition">
-        <h2 class="text-xl font-semibold mb-4 text-indigo-300">2. Ticket-Panel konfigurieren</h2>
-        
-        <form id="panelForm" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Ziel-Textkanal</label>
-            <select id="channelSelect" required class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
-              <option value="">Wähle zuerst einen Server aus...</option>
+      <!-- TAB 2: TICKETS CONFIG & TEMPLATES -->
+      <section id="tab-tickets" class="hidden">
+        <div class="header">
+          <h2>🎫 Ticket-Panel konfigurieren</h2>
+        </div>
+
+        <div class="card">
+          <h3>Schnell-Vorlage wählen</h3>
+          <div class="form-group">
+            <select id="ticketTemplate" onchange="applyTemplate()">
+              <option value="default">-- Eigene Einstellungen --</option>
+              <option value="support">🛠️ Allgemeine Support-Anfrage</option>
+              <option value="apply">📝 Team-Bewerbung</option>
+              <option value="bug">🐛 Fehler / Bug-Report</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="form-group">
+            <label>Ziel-Textkanal</label>
+            <select id="ticketChannelSelect"><option>Lade Kanäle...</option></select>
+          </div>
+
+          <div class="form-group">
+            <label>Panel Titel</label>
+            <input type="text" id="panelTitle" value="Support-Tickets">
+          </div>
+
+          <div class="form-group">
+            <label>Beschreibung</label>
+            <textarea id="panelDesc" rows="3">Klicke unten auf den Button, um ein privates Support-Ticket zu öffnen.</textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Button Beschriftung</label>
+            <input type="text" id="buttonLabel" value="Ticket erstellen">
+          </div>
+
+          <button class="btn" onclick="sendTicketPanel()">Panel auf Discord absenden</button>
+        </div>
+      </section>
+
+      <!-- TAB 3: MODERATION -->
+      <section id="tab-moderation" class="hidden">
+        <div class="header">
+          <h2>🛡️ Moderation & Sanktionen</h2>
+        </div>
+
+        <div class="card">
+          <div class="form-group">
+            <label>Discord User ID</label>
+            <input type="text" id="modUserId" placeholder="z.B. 123456789012345678">
+          </div>
+
+          <div class="form-group">
+            <label>Aktion wählen</label>
+            <select id="modAction">
+              <option value="warn">⚠️ Warnen (DM Nachricht)</option>
+              <option value="timeout">⏱️ Timeout (1 Stunde Mute)</option>
+              <option value="kick">🚪 Kick (Vom Server werfen)</option>
+              <option value="ban">🔨 Ban (Dauerhaft sperren)</option>
             </select>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium mb-1">Panel Titel</label>
-            <input type="text" id="panelTitle" value="Support-Tickets" required class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+          <div class="form-group">
+            <label>Begründung</label>
+            <textarea id="modReason" rows="2" placeholder="Verstoß gegen die Serverregeln..."></textarea>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium mb-1">Beschreibung</label>
-            <textarea id="panelDescription" rows="3" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">Klicke unten auf den Button, um ein privates Support-Ticket zu öffnen.</textarea>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Button Text</label>
-              <input type="text" id="buttonLabel" value="Ticket erstellen" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Button Farbe</label>
-              <select id="buttonStyle" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
-                <option value="Primary">Blau (Primary)</option>
-                <option value="Success">Grün (Success)</option>
-                <option value="Secondary">Grau (Secondary)</option>
-                <option value="Danger">Rot (Danger)</option>
-              </select>
-            </div>
-          </div>
-
-          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 font-semibold py-2.5 rounded-lg transition shadow-md">
-            Panel auf Discord absenden
-          </button>
-        </form>
+          <button class="btn btn-danger" onclick="executeModAction()">Sanktion ausführen</button>
+        </div>
       </section>
-    </main>
 
-    <div id="loginNotice" class="text-center py-20 bg-slate-800 rounded-xl border border-slate-700">
-      <h2 class="text-2xl font-bold mb-2">Willkommen bei ToolBox</h2>
-      <p class="text-slate-400 mb-6">Bitte melde dich mit Discord an, um deine Server und Ticket-Panels zu verwalten.</p>
-      <a href="/api/auth/login" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-semibold transition">
-        Jetzt mit Discord anmelden
-      </a>
-    </div>
+    </main>
   </div>
 
   <script src="app.js"></script>

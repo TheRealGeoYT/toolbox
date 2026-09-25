@@ -1,141 +1,192 @@
+let activeGuild = null;
+let currentUser = null;
+
+// Beim Start Nutzer & Verifizierungsstatus prüfen
 document.addEventListener('DOMContentLoaded', async () => {
-  const userProfile = document.getElementById('userProfile');
-  const dashboardContent = document.getElementById('dashboardContent');
-  const loginNotice = document.getElementById('loginNotice');
-  const guildList = document.getElementById('guildList');
-  const panelSection = document.getElementById('panelSection');
-  const channelSelect = document.getElementById('channelSelect');
-  const panelForm = document.getElementById('panelForm');
+  await checkAuth();
+  loadGuilds();
+});
 
-  let selectedGuildId = null;
-
+async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
     const data = await res.json();
 
+    const userInfoEl = document.getElementById('userInfo');
+    const authBtn = document.getElementById('authBtn');
+
     if (data.authenticated) {
-      loginNotice.classList.add('hidden');
-      dashboardContent.classList.remove('hidden');
-
-      const avatarUrl = data.user.avatar 
-        ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png` 
-        : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-      userProfile.innerHTML = `
-        <img src="${avatarUrl}" class="w-8 h-8 rounded-full">
-        <span class="font-medium">${data.user.username}</span>
-        <button id="logoutBtn" class="text-xs bg-red-600/30 text-red-300 hover:bg-red-600/50 px-3 py-1 rounded transition ml-2">
-          Abmelden
-        </button>
-      `;
-
-      document.getElementById('logoutBtn').addEventListener('click', async () => {
-        await fetch('/api/auth/logout');
-        window.location.reload();
-      });
-
-      loadGuilds();
+      currentUser = data.user;
+      const verifiedBadge = data.isVerified ? ' <span class="verified-icon" title="Discord Account Verifiziert">☑️</span>' : '';
+      userInfoEl.innerHTML = `<strong>${currentUser.username}</strong>${verifiedBadge}`;
+      authBtn.innerText = 'Abmelden';
+    } else {
+      userInfoEl.innerHTML = `<span>Nicht angemeldet</span>`;
+      authBtn.innerText = 'Login';
     }
   } catch (err) {
-    console.error('Fehler beim Laden', err);
+    console.error('Auth-Check fehlgeschlagen:', err);
   }
+}
 
-  async function loadGuilds() {
-    guildList.innerHTML = '<p class="text-slate-400">Lade Server...</p>';
-    try {
-      const res = await fetch('/api/guilds');
-      const guilds = await res.json();
-
-      guildList.innerHTML = '';
-      guilds.forEach(guild => {
-        const card = document.createElement('div');
-        card.className = `p-4 rounded-lg border flex items-center justify-between transition ${
-          guild.hasBot 
-            ? 'bg-slate-700/50 border-slate-600 hover:border-indigo-500 cursor-pointer' 
-            : 'bg-slate-800/40 border-slate-700 opacity-60'
-        }`;
-
-        const icon = guild.icon 
-          ? `<img src="${guild.icon}" class="w-10 h-10 rounded-full">` 
-          : `<div class="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center font-bold">${guild.name[0]}</div>`;
-
-        card.innerHTML = `
-          <div class="flex items-center gap-3">
-            ${icon}
-            <div>
-              <h3 class="font-medium">${guild.name}</h3>
-              <span class="text-xs ${guild.hasBot ? 'text-green-400' : 'text-amber-400'}">
-                ${guild.hasBot ? '● Bot vorhanden' : '○ Bot fehlt'}
-              </span>
-            </div>
-          </div>
-          ${!guild.hasBot ? `<a href="https://discord.com/api/oauth2/authorize?client_id=1508027425655619684&permissions=8&scope=bot" target="_blank" class="text-xs bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded">Einladen</a>` : ''}
-        `;
-
-        if (guild.hasBot) {
-          card.addEventListener('click', () => selectGuild(guild.id, card));
-        }
-
-        guildList.appendChild(card);
-      });
-    } catch (err) {
-      guildList.innerHTML = '<p class="text-red-400">Fehler beim Laden der Server.</p>';
-    }
+function handleAuth() {
+  if (currentUser) {
+    fetch('/api/auth/logout').then(() => window.location.reload());
+  } else {
+    window.location.href = '/api/auth/login';
   }
+}
 
-  async function selectGuild(guildId, cardElement) {
-    selectedGuildId = guildId;
+// Tab Wechsel
+function switchTab(tabName) {
+  ['servers', 'tickets', 'moderation'].forEach(tab => {
+    document.getElementById(`tab-${tab}`).classList.add('hidden');
+    document.getElementById(`btnNav${capitalize(tab)}`).classList.remove('active');
+  });
 
-    Array.from(guildList.children).forEach(c => c.classList.remove('ring-2', 'ring-indigo-500'));
-    cardElement.classList.add('ring-2', 'ring-indigo-500');
+  document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+  document.getElementById(`btnNav${capitalize(tabName)}`).classList.add('active');
+}
 
-    channelSelect.innerHTML = '<option value="">Lade Kanäle...</option>';
-    panelSection.classList.remove('opacity-50', 'pointer-events-none');
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
-    try {
-      const res = await fetch(`/api/guilds/${guildId}/channels`);
-      const channels = await res.json();
+// Server Laden
+async function loadGuilds() {
+  const container = document.getElementById('serverList');
+  try {
+    const res = await fetch('/api/guilds');
+    const guilds = await res.json();
 
-      channelSelect.innerHTML = '<option value="">-- Kanal wählen --</option>';
-      channels.forEach(ch => {
-        channelSelect.innerHTML += `<option value="${ch.id}"># ${ch.name}</option>`;
-      });
-    } catch (err) {
-      channelSelect.innerHTML = '<option value="">Fehler beim Laden der Kanäle</option>';
-    }
-  }
-
-  panelForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const payload = {
-      channelId: channelSelect.value,
-      title: document.getElementById('panelTitle').value,
-      description: document.getElementById('panelDescription').value,
-      buttonLabel: document.getElementById('buttonLabel').value,
-      buttonStyle: document.getElementById('buttonStyle').value
-    };
-
-    if (!payload.channelId) {
-      alert('Bitte wähle einen Ziel-Kanal aus.');
+    if (!Array.isArray(guilds)) {
+      container.innerHTML = '<p>Bitte zuerst mit Discord anmelden!</p>';
       return;
     }
 
-    try {
-      const res = await fetch('/api/tickets/create-panel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    container.innerHTML = '';
+    guilds.forEach(guild => {
+      const card = document.createElement('div');
+      card.className = 'server-card';
+      card.onclick = () => selectGuild(guild);
 
-      const data = await res.json();
-      if (res.ok) {
-        alert('Ticket-Panel erfolgreich gepostet!');
-      } else {
-        alert(`Fehler: ${data.error}`);
-      }
-    } catch (err) {
-      alert('Netzwerkfehler beim Senden.');
-    }
+      const iconUrl = guild.icon || '';
+      card.innerHTML = `
+        <div class="server-avatar" style="margin: 0 auto 10px;">
+          ${iconUrl ? `<img src="${iconUrl}">` : guild.name.charAt(0)}
+        </div>
+        <h4>${guild.name}</h4>
+        <small style="color: ${guild.hasBot ? '#10b981' : '#f59e0b'}">
+          ${guild.hasBot ? '● Bot vorhanden' : '○ Bot fehlt'}
+        </small>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = '<p>Fehler beim Laden der Server.</p>';
+  }
+}
+
+// Server Auswählen
+function selectGuild(guild) {
+  activeGuild = guild;
+
+  // Sidebar Aktualisieren
+  document.getElementById('sidebarServerName').innerText = guild.name;
+  document.getElementById('sidebarServerStatus').innerText = guild.hasBot ? 'Aktiv' : 'Bot einladen';
+  
+  const iconEl = document.getElementById('sidebarServerIcon');
+  if (guild.icon) {
+    iconEl.innerHTML = `<img src="${guild.icon}">`;
+  } else {
+    iconEl.innerText = guild.name.charAt(0);
+  }
+
+  loadChannels(guild.id);
+  switchTab('tickets');
+}
+
+// Kanäle Laden
+async function loadChannels(guildId) {
+  const select = document.getElementById('ticketChannelSelect');
+  select.innerHTML = '<option>Lade Kanäle...</option>';
+
+  try {
+    const res = await fetch(`/api/guilds/${guildId}/channels`);
+    const channels = await res.json();
+
+    select.innerHTML = '';
+    channels.forEach(ch => {
+      select.innerHTML += `<option value="${ch.id}"># ${ch.name}</option>`;
+    });
+  } catch (err) {
+    select.innerHTML = '<option>Konnte Kanäle nicht laden</option>';
+  }
+}
+
+// Ticket Templates (Vorlagen)
+function applyTemplate() {
+  const template = document.getElementById('ticketTemplate').value;
+  const title = document.getElementById('panelTitle');
+  const desc = document.getElementById('panelDesc');
+  const label = document.getElementById('buttonLabel');
+
+  if (template === 'support') {
+    title.value = '🛠️ Allgemeine Support-Anfrage';
+    desc.value = 'Benötigst du Hilfe auf unserem Server? Klicke unten, um ein privates Ticket mit dem Team zu starten.';
+    label.value = 'Support anfordern';
+  } else if (template === 'apply') {
+    title.value = '📝 Team-Bewerbungen';
+    desc.value = 'Möchtest du dich als Moderator oder Entwickler bewerben? Erstelle ein Bewerbungsticket!';
+    label.value = 'Jetzt bewerben';
+  } else if (template === 'bug') {
+    title.value = '🐛 Bug / Fehler melden';
+    desc.value = 'Hast du einen Fehler gefunden? Beschreibe ihn im Ticket so genau wie möglich!';
+    label.value = 'Fehler melden';
+  }
+}
+
+// Panel Senden
+async function sendTicketPanel() {
+  if (!activeGuild) return alert('Bitte wähle zuerst einen Server aus!');
+
+  const body = {
+    channelId: document.getElementById('ticketChannelSelect').value,
+    title: document.getElementById('panelTitle').value,
+    description: document.getElementById('panelDesc').value,
+    buttonLabel: document.getElementById('buttonLabel').value,
+    buttonStyle: 'Primary'
+  };
+
+  const res = await fetch('/api/tickets/create-panel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
-});
+
+  const data = await res.json();
+  alert(data.message || data.error);
+}
+
+// Moderations-Aktion Ausführen
+async function executeModAction() {
+  if (!activeGuild) return alert('Bitte wähle zuerst einen Server aus!');
+
+  const body = {
+    guildId: activeGuild.id,
+    userId: document.getElementById('modUserId').value,
+    action: document.getElementById('modAction').value,
+    reason: document.getElementById('modReason').value
+  };
+
+  if (!body.userId) return alert('Bitte eine Discord User ID eingeben!');
+
+  const res = await fetch('/api/moderation/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const data = await res.json();
+  alert(data.message || data.error);
+}

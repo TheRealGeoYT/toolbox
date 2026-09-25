@@ -15,10 +15,8 @@ const {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Wichtig für HTTPS & Sessions auf Render.com
 app.set('trust proxy', 1);
 
-// Middleware Setup
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'toolbox_secret',
@@ -26,23 +24,22 @@ app.use(session({
   saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 Stunden
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 Tage merken
   }
 }));
 
-// Statische Dateien aus dem Frontend bereitstellen
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
-// Discord Bot Client initialisieren
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
-// --- AUTHENTIFIZIERUNG (DISCORD OAUTH2) ---
+// --- AUTHENTIFIZIERUNG & VERIFIZIERUNG ---
 
 app.get('/api/auth/login', (req, res) => {
   const redirectUri = encodeURIComponent(process.env.REDIRECT_URI);
@@ -77,6 +74,7 @@ app.get('/api/auth/callback', async (req, res) => {
 
     req.session.user = userData;
     req.session.accessToken = tokenData.access_token;
+    req.session.isVerified = userData.verified || true; // Discord Account Status merken
 
     res.redirect('/');
   } catch (err) {
@@ -87,7 +85,11 @@ app.get('/api/auth/callback', async (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.session.user) return res.status(401).json({ authenticated: false });
-  res.json({ authenticated: true, user: req.session.user });
+  res.json({ 
+    authenticated: true, 
+    user: req.session.user,
+    isVerified: req.session.isVerified || false
+  });
 });
 
 app.get('/api/auth/logout', (req, res) => {
@@ -95,7 +97,7 @@ app.get('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// --- SERVER & TICKET API ---
+// --- GUILDS & CHANNELS API ---
 
 app.get('/api/guilds', async (req, res) => {
   if (!req.session.accessToken) return res.status(401).json({ error: 'Nicht angemeldet' });
@@ -148,6 +150,8 @@ app.get('/api/guilds/:guildId/channels', async (req, res) => {
   }
 });
 
+// --- TICKET PANEL API ---
+
 app.post('/api/tickets/create-panel', async (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
 
@@ -178,10 +182,56 @@ app.post('/api/tickets/create-panel', async (req, res) => {
   }
 });
 
-// --- DISCORD INTERAKTIONEN ---
+// --- MODERATION API (BAN, KICK, WARN, TIMEOUT) ---
+
+app.post('/api/moderation/action', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
+
+  const { guildId, userId, action, reason } = req.body;
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+
+    if (action === 'ban') {
+      await guild.members.ban(userId, { reason: reason || 'Über Dashboard gebannt' });
+      return res.json({ success: true, message: `Benutzer ${userId} wurde gebannt.` });
+    }
+
+    if (!member) return res.status(404).json({ error: 'Benutzer ist nicht auf diesem Server.' });
+
+    if (action === 'kick') {
+      await member.kick(reason || 'Über Dashboard gekickt');
+      return res.json({ success: true, message: `Benutzer ${member.user.tag} wurde gekickt.` });
+    }
+
+    if (action === 'timeout') {
+      await member.timeout(60 * 60 * 1000, reason || '1 Stunde Timeout über Dashboard');
+      return res.json({ success: true, message: `Benutzer ${member.user.tag} für 1 Std ins Timeout versetzt.` });
+    }
+
+    if (action === 'warn') {
+      // Sendet eine Verwarnung per Direktnachricht
+      await member.send(`⚠️ **Verwarnung von ${guild.name}:** ${reason || 'Kein Grund angegeben.'}`).catch(() => {});
+      return res.json({ success: true, message: `Verwarnung an ${member.user.tag} gesendet.` });
+    }
+
+    res.status(400).json({ error: 'Ungültige Aktion' });
+  } catch (err) {
+    console.error('[Moderation Action Error]', err);
+    res.status(500).json({ error: 'Aktion konnte nicht ausgeführt werden. Prüfe Bot-Rechte!' });
+  }
+});
+
+// --- DISCORD INTERAKTIONEN (CLAIM, CLOSE, CLOSE REQUEST) ---
 
 client.on('interactionCreate', async (interaction) => {
-  if (interaction.isButton() && interaction.customId === 'create_ticket') {
+  if (!interaction.isButton()) return;
+
+  // 1. Ticket Erstellen
+  if (interaction.customId === 'create_ticket') {
     try {
       const ticketChannel = await interaction.guild.channels.create({
         name: `ticket-${interaction.user.username}`,
@@ -191,27 +241,67 @@ client.on('interactionCreate', async (interaction) => {
         ]
       });
 
+      const claimBtn = new ButtonBuilder()
+        .setCustomId('claim_ticket')
+        .setLabel('Claim (Beanspruchen)')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('🙋‍♂️');
+
+      const closeReqBtn = new ButtonBuilder()
+        .setCustomId('request_close')
+        .setLabel('Close Request')
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('⚠️');
+
       const closeBtn = new ButtonBuilder()
         .setCustomId('close_ticket')
-        .setLabel('Ticket schließen')
+        .setLabel('Schließen')
         .setStyle(ButtonStyle.Danger)
         .setEmoji('🔒');
 
-      const row = new ActionRowBuilder().addComponents(closeBtn);
+      const row = new ActionRowBuilder().addComponents(claimBtn, closeReqBtn, closeBtn);
 
-      await ticketChannel.send({
-        content: `Hallo ${interaction.user}, willkommen in deinem Ticket! Beschreibe bitte dein Anliegen.`,
-        components: [row]
-      });
+      const embed = new EmbedBuilder()
+        .setTitle(`Ticket von ${interaction.user.username}`)
+        .setDescription('Willkommen! Ein Teammitglied wird sich in Kürze um dein Anliegen kümmern.')
+        .setColor('#5865F2');
 
+      await ticketChannel.send({ embeds: [embed], components: [row] });
       await interaction.reply({ content: `Dein Ticket wurde erstellt: ${ticketChannel}`, flags: 64 });
     } catch (err) {
-      console.error('[Ticket Interaction Error]', err);
-      await interaction.reply({ content: 'Fehler beim Erstellen des Ticket-Kanals.', flags: 64 });
+      console.error('[Ticket Create Error]', err);
+      await interaction.reply({ content: 'Fehler beim Erstellen des Tickets.', flags: 64 });
     }
   }
 
-  if (interaction.isButton() && interaction.customId === 'close_ticket') {
+  // 2. Ticket Beanspruchen (Claim)
+  if (interaction.customId === 'claim_ticket') {
+    const embed = new EmbedBuilder()
+      .setDescription(`🙋‍♂️ Dieses Ticket wurde von **${interaction.user.tag}** übernommen!`)
+      .setColor('#57F287');
+    
+    await interaction.reply({ embeds: [embed] });
+  }
+
+  // 3. Schließen anfragen (Close Request)
+  if (interaction.customId === 'request_close') {
+    const confirmBtn = new ButtonBuilder()
+      .setCustomId('close_ticket')
+      .setLabel('Jetzt Schließen')
+      .setStyle(ButtonStyle.Danger);
+
+    const row = new ActionRowBuilder().addComponents(confirmBtn);
+
+    const embed = new EmbedBuilder()
+      .setTitle('Löschantrag gestellt')
+      .setDescription(`⚠️ **${interaction.user.tag}** schlägt vor, dieses Ticket zu schließen. Bitte bestätigen!`)
+      .setColor('#FEE75C');
+
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
+
+  // 4. Ticket Schließen
+  if (interaction.customId === 'close_ticket') {
     await interaction.reply('Das Ticket wird in 5 Sekunden gelöscht...');
     setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
   }
