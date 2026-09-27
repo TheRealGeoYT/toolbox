@@ -14,28 +14,44 @@
       --subtext: #94a3b8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background-color: var(--bg-dark); color: var(--text); display: flex; min-height: 100vh; }
+    body { background-color: var(--bg-dark); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
 
-    /* Layout */
-    .app-container { display: flex; width: 100%; }
+    /* Topbar Header */
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; background-color: var(--sidebar-bg); border-bottom: 1px solid #334155; }
+    .brand { font-size: 1.4rem; font-weight: bold; color: var(--accent); display: flex; align-items: center; gap: 12px; }
+    .brand-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: #1e293b; }
+
+    .user-profile-top { display: flex; align-items: center; gap: 15px; }
+    .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+    .verified-icon { color: #38bdf8; }
+
+    /* Main Container */
+    .app-container { display: flex; flex: 1; }
     
     /* Sidebar */
-    .sidebar { width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; }
-    .brand { font-size: 1.5rem; font-weight: bold; color: var(--accent); margin-bottom: 25px; display: flex; align-items: center; gap: 10px; }
+    .sidebar { width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; position: relative; }
     
-    .server-selector { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-bottom: 25px; display: flex; align-items: center; gap: 12px; }
-    .server-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-weight: bold; overflow: hidden; }
+    /* Server Selector Dropdown */
+    .server-dropdown-container { position: relative; margin-bottom: 25px; }
+    .server-selector-btn { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; text-align: left; color: white; transition: background 0.2s; }
+    .server-selector-btn:hover { background: #334155; }
+    .server-info-flex { display: flex; align-items: center; gap: 12px; }
+    .server-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-weight: bold; overflow: hidden; flex-shrink: 0; }
     .server-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .server-info h4 { font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 150px; }
+    .server-info h4 { font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 140px; }
     .server-info span { font-size: 0.75rem; color: #10b981; }
+
+    /* Dropdown Liste */
+    .server-dropdown-menu { position: absolute; top: 100%; left: 0; right: 0; background: #1e293b; border: 1px solid #334155; border-radius: 10px; margin-top: 5px; max-height: 250px; overflow-y: auto; z-index: 100; display: none; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+    .server-dropdown-menu.show { display: block; }
+    .dropdown-item { padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid #334155; transition: background 0.2s; }
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item:hover { background: var(--accent); }
+    .dropdown-item .server-avatar { width: 30px; height: 30px; }
 
     .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 8px; }
     .nav-item button { width: 100%; background: transparent; border: none; color: var(--subtext); padding: 12px 15px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
     .nav-item button:hover, .nav-item button.active { background: var(--accent); color: white; }
-
-    .user-profile { margin-top: auto; padding-top: 15px; border-top: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
-    .user-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--subtext); }
-    .verified-icon { color: #38bdf8; }
 
     /* Main Content */
     .main-content { flex: 1; padding: 30px; overflow-y: auto; }
@@ -48,13 +64,13 @@
     .form-group label { display: block; font-size: 0.85rem; color: var(--subtext); margin-bottom: 6px; }
     input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; }
     
-    .btn { background: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+    .btn { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
     .btn:hover { opacity: 0.9; }
     .btn-danger { background: #ef4444; }
     
     .hidden { display: none !important; }
     
-    /* Server List Grid */
+    /* Server Grid */
     .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
     .server-card { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; }
     .server-card:hover { transform: translateY(-3px); border-color: var(--accent); }
@@ -62,17 +78,41 @@
 </head>
 <body>
 
+  <!-- TOPBAR HEADER MIT BRAND & ANMELDUNG OBEN RECHTS -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/toolbox.png" alt="ToolBox Logo" class="brand-logo" onerror="this.src='https://via.placeholder.com/36?text=TB'">
+      <span>ToolBox</span>
+    </div>
+
+    <div class="user-profile-top">
+      <div id="userInfo" style="display: flex; align-items: center; gap: 8px;">
+        <span>Nicht angemeldet</span>
+      </div>
+      <button id="authBtn" class="btn" onclick="handleAuth()">Login</button>
+    </div>
+  </header>
+
   <div class="app-container">
     <!-- LINKER NAVIGATIONSSAMMLER (SIDEBAR) -->
     <aside class="sidebar">
-      <div class="brand">🧰 ToolBox</div>
+      
+      <!-- Ausgewählter Server Dropdown Button -->
+      <div class="server-dropdown-container">
+        <button class="server-selector-btn" onclick="toggleServerDropdown()">
+          <div class="server-info-flex">
+            <div class="server-avatar" id="sidebarServerIcon">?</div>
+            <div class="server-info">
+              <h4 id="sidebarServerName">Kein Server</h4>
+              <span id="sidebarServerStatus">Bitte wählen</span>
+            </div>
+          </div>
+          <span>▼</span>
+        </button>
 
-      <!-- Ausgewählter Server Oben -->
-      <div class="server-selector" id="selectedServerDisplay">
-        <div class="server-avatar" id="sidebarServerIcon">?</div>
-        <div class="server-info">
-          <h4 id="sidebarServerName">Kein Server</h4>
-          <span id="sidebarServerStatus">Bitte wählen</span>
+        <!-- Ausfahrbare Liste -->
+        <div class="server-dropdown-menu" id="serverDropdownMenu">
+          <div style="padding: 10px; color: var(--subtext); text-align: center;" id="dropdownLoading">Lade Server...</div>
         </div>
       </div>
 
@@ -82,14 +122,6 @@
         <li class="nav-item"><button id="btnNavTickets" onclick="switchTab('tickets')">🎫 Tickets Modul</button></li>
         <li class="nav-item"><button id="btnNavMod" onclick="switchTab('moderation')">🛡️ Moderation</button></li>
       </ul>
-
-      <!-- User Account / Status -->
-      <div class="user-profile">
-        <div class="user-badge" id="userInfo">
-          <span>Nicht angemeldet</span>
-        </div>
-        <button id="authBtn" class="btn" style="padding: 5px 10px; font-size: 0.8rem;" onclick="handleAuth()">Login</button>
-      </div>
     </aside>
 
     <!-- HAUPTINHALTSBEREICH -->
