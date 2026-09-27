@@ -16,7 +16,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background-color: var(--bg-dark); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
 
-    /* Topbar Header */
     .topbar { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; background-color: var(--sidebar-bg); border-bottom: 1px solid #334155; }
     .brand { font-size: 1.4rem; font-weight: bold; color: var(--accent); display: flex; align-items: center; gap: 12px; }
     .brand-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: #1e293b; }
@@ -25,38 +24,28 @@
     .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
     .verified-icon { color: #38bdf8; }
 
-    /* Main Container */
     .app-container { display: flex; flex: 1; }
-    
-    /* Sidebar */
     .sidebar { width: 280px; background-color: var(--sidebar-bg); border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; position: relative; }
     
-    /* Server Selector Dropdown */
     .server-dropdown-container { position: relative; margin-bottom: 25px; }
-    .server-selector-btn { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; text-align: left; color: white; transition: background 0.2s; }
-    .server-selector-btn:hover { background: #334155; }
+    .server-selector-btn { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; text-align: left; color: white; }
     .server-info-flex { display: flex; align-items: center; gap: 12px; }
     .server-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-weight: bold; overflow: hidden; flex-shrink: 0; }
     .server-avatar img { width: 100%; height: 100%; object-fit: cover; }
     .server-info h4 { font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 140px; }
     .server-info span { font-size: 0.75rem; color: #10b981; }
 
-    /* Dropdown Liste */
-    .server-dropdown-menu { position: absolute; top: 100%; left: 0; right: 0; background: #1e293b; border: 1px solid #334155; border-radius: 10px; margin-top: 5px; max-height: 250px; overflow-y: auto; z-index: 100; display: none; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+    .server-dropdown-menu { position: absolute; top: 100%; left: 0; right: 0; background: #1e293b; border: 1px solid #334155; border-radius: 10px; margin-top: 5px; max-height: 250px; overflow-y: auto; z-index: 100; display: none; }
     .server-dropdown-menu.show { display: block; }
-    .dropdown-item { padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid #334155; transition: background 0.2s; }
-    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item { padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid #334155; }
     .dropdown-item:hover { background: var(--accent); }
-    .dropdown-item .server-avatar { width: 30px; height: 30px; }
 
     .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-    .nav-item button { width: 100%; background: transparent; border: none; color: var(--subtext); padding: 12px 15px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+    .nav-item button { width: 100%; background: transparent; border: none; color: var(--subtext); padding: 12px 15px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 10px; }
     .nav-item button:hover, .nav-item button.active { background: var(--accent); color: white; }
 
-    /* Main Content */
     .main-content { flex: 1; padding: 30px; overflow-y: auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-    
     .card { background: var(--card-bg); border-radius: 12px; padding: 25px; border: 1px solid #334155; margin-bottom: 20px; }
     .card h3 { margin-bottom: 15px; font-size: 1.2rem; }
     
@@ -64,21 +53,20 @@
     .form-group label { display: block; font-size: 0.85rem; color: var(--subtext); margin-bottom: 6px; }
     input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; }
     
-    .btn { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.9; }
+    .btn { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .btn-secondary { background: #475569; }
     .btn-danger { background: #ef4444; }
-    
     .hidden { display: none !important; }
+
+    .question-row { display: flex; gap: 10px; margin-bottom: 10px; }
     
-    /* Server Grid */
     .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
-    .server-card { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; }
-    .server-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .server-card { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; }
+    .server-card:hover { border-color: var(--accent); }
   </style>
 </head>
 <body>
 
-  <!-- TOPBAR HEADER MIT BRAND & ANMELDUNG OBEN RECHTS -->
   <header class="topbar">
     <div class="brand">
       <img src="assets/toolbox.png" alt="ToolBox Logo" class="brand-logo" onerror="this.src='https://via.placeholder.com/36?text=TB'">
@@ -94,10 +82,7 @@
   </header>
 
   <div class="app-container">
-    <!-- LINKER NAVIGATIONSSAMMLER (SIDEBAR) -->
     <aside class="sidebar">
-      
-      <!-- Ausgewählter Server Dropdown Button -->
       <div class="server-dropdown-container">
         <button class="server-selector-btn" onclick="toggleServerDropdown()">
           <div class="server-info-flex">
@@ -110,39 +95,29 @@
           <span>▼</span>
         </button>
 
-        <!-- Ausfahrbare Liste -->
         <div class="server-dropdown-menu" id="serverDropdownMenu">
-          <div style="padding: 10px; color: var(--subtext); text-align: center;" id="dropdownLoading">Lade Server...</div>
+          <div style="padding: 10px; color: var(--subtext); text-align: center;">Lade Server...</div>
         </div>
       </div>
 
-      <!-- Module/Navigation -->
       <ul class="nav-menu">
         <li class="nav-item"><button id="btnNavServers" class="active" onclick="switchTab('servers')">🌐 Server Auswählen</button></li>
         <li class="nav-item"><button id="btnNavTickets" onclick="switchTab('tickets')">🎫 Tickets Modul</button></li>
-        <li class="nav-item"><button id="btnNavMod" onclick="switchTab('moderation')">🛡️ Moderation</button></li>
       </ul>
     </aside>
 
-    <!-- HAUPTINHALTSBEREICH -->
     <main class="main-content">
       
-      <!-- TAB 1: SERVER WÄHLEN -->
       <section id="tab-servers">
-        <div class="header">
-          <h2>Wähle deinen Server aus</h2>
-        </div>
+        <div class="header"><h2>Wähle deinen Server aus</h2></div>
         <div class="server-grid" id="serverList">Lade Server...</div>
       </section>
 
-      <!-- TAB 2: TICKETS CONFIG & TEMPLATES -->
       <section id="tab-tickets" class="hidden">
-        <div class="header">
-          <h2>🎫 Ticket-Panel konfigurieren</h2>
-        </div>
+        <div class="header"><h2>🎫 Multi-Panel Ticket Konfigurator</h2></div>
 
         <div class="card">
-          <h3>Schnell-Vorlage wählen</h3>
+          <h3>1. Vorlage wählen</h3>
           <div class="form-group">
             <select id="ticketTemplate" onchange="applyTemplate()">
               <option value="default">-- Eigene Einstellungen --</option>
@@ -154,6 +129,7 @@
         </div>
 
         <div class="card">
+          <h3>2. Panel Details</h3>
           <div class="form-group">
             <label>Ziel-Textkanal</label>
             <select id="ticketChannelSelect"><option>Lade Kanäle...</option></select>
@@ -166,47 +142,29 @@
 
           <div class="form-group">
             <label>Beschreibung</label>
-            <textarea id="panelDesc" rows="3">Klicke unten auf den Button, um ein privates Support-Ticket zu öffnen.</textarea>
+            <textarea id="panelDesc" rows="3">Klicke unten auf den Button, um ein Ticket zu öffnen.</textarea>
           </div>
 
           <div class="form-group">
             <label>Button Beschriftung</label>
             <input type="text" id="buttonLabel" value="Ticket erstellen">
           </div>
-
-          <button class="btn" onclick="sendTicketPanel()">Panel auf Discord absenden</button>
-        </div>
-      </section>
-
-      <!-- TAB 3: MODERATION -->
-      <section id="tab-moderation" class="hidden">
-        <div class="header">
-          <h2>🛡️ Moderation & Sanktionen</h2>
         </div>
 
         <div class="card">
-          <div class="form-group">
-            <label>Discord User ID</label>
-            <input type="text" id="modUserId" placeholder="z.B. 123456789012345678">
+          <h3>3. Fragen für den Ersteller (Modal Formular)</h3>
+          <p style="color: var(--subtext); font-size: 0.85rem; margin-bottom: 15px;">
+            Füge Fragen hinzu, die der Benutzer beim Klicken auf den Button im Discord-Formular ausfüllen muss.
+          </p>
+
+          <div id="questionsContainer">
+            <!-- Dynamische Fragen kommen hierhin -->
           </div>
 
-          <div class="form-group">
-            <label>Aktion wählen</label>
-            <select id="modAction">
-              <option value="warn">⚠️ Warnen (DM Nachricht)</option>
-              <option value="timeout">⏱️ Timeout (1 Stunde Mute)</option>
-              <option value="kick">🚪 Kick (Vom Server werfen)</option>
-              <option value="ban">🔨 Ban (Dauerhaft sperren)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Begründung</label>
-            <textarea id="modReason" rows="2" placeholder="Verstoß gegen die Serverregeln..."></textarea>
-          </div>
-
-          <button class="btn btn-danger" onclick="executeModAction()">Sanktion ausführen</button>
+          <button class="btn btn-secondary" onclick="addQuestionInput()" style="margin-top: 10px;">+ Frage hinzufügen</button>
         </div>
+
+        <button class="btn" onclick="sendTicketPanel()" style="width: 100%; padding: 15px; font-size: 1.1rem;">Panel auf Discord absenden</button>
       </section>
 
     </main>

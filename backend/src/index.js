@@ -9,7 +9,14 @@ const {
   ButtonBuilder, 
   ButtonStyle, 
   ActionRowBuilder, 
-  PermissionFlagsBits 
+  PermissionFlagsBits,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType
 } = require('discord.js');
 
 const app = express();
@@ -24,7 +31,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 Tage merken
+    maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
 
@@ -39,7 +46,10 @@ const client = new Client({
   ]
 });
 
-// --- AUTHENTIFIZIERUNG & VERIFIZIERUNG ---
+// Temporärer Speicher für Panel-Fragen
+const panelQuestionsStore = new Map();
+
+// --- AUTHENTIFIZIERUNG (DISCORD OAUTH2) ---
 
 app.get('/api/auth/login', (req, res) => {
   const redirectUri = encodeURIComponent(process.env.REDIRECT_URI);
@@ -74,7 +84,7 @@ app.get('/api/auth/callback', async (req, res) => {
 
     req.session.user = userData;
     req.session.accessToken = tokenData.access_token;
-    req.session.isVerified = userData.verified || true; // Discord Account Status merken
+    req.session.isVerified = userData.verified || true;
 
     res.redirect('/');
   } catch (err) {
@@ -97,7 +107,7 @@ app.get('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// --- GUILDS & CHANNELS API ---
+// --- SERVER & KANÄLE API ---
 
 app.get('/api/guilds', async (req, res) => {
   if (!req.session.accessToken) return res.status(401).json({ error: 'Nicht angemeldet' });
@@ -127,7 +137,6 @@ app.get('/api/guilds', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error('[Guilds Error]', err);
     res.status(500).json({ error: 'Fehler beim Laden der Server' });
   }
 });
@@ -145,21 +154,25 @@ app.get('/api/guilds/:guildId/channels', async (req, res) => {
 
     res.json(channels);
   } catch (err) {
-    console.error('[Channels Error]', err);
     res.status(500).json({ error: 'Konnte Kanäle nicht laden' });
   }
 });
 
-// --- TICKET PANEL API ---
+// --- TICKET PANEL CREATION API (MIT FRAGEN & MULTI-PANEL) ---
 
 app.post('/api/tickets/create-panel', async (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
 
-  const { channelId, title, description, buttonLabel, buttonStyle } = req.body;
+  const { channelId, title, description, buttonLabel, buttonStyle, questions } = req.body;
 
   try {
     const channel = await client.channels.fetch(channelId);
     if (!channel) return res.status(404).json({ error: 'Kanal nicht gefunden' });
+
+    const panelId = `panel_${Date.now()}`;
+    if (questions && Array.isArray(questions)) {
+      panelQuestionsStore.set(panelId, questions.filter(q => q.trim().length > 0));
+    }
 
     const embed = new EmbedBuilder()
       .setTitle(title || 'Support-Tickets')
@@ -167,7 +180,7 @@ app.post('/api/tickets/create-panel', async (req, res) => {
       .setColor('#5865F2');
 
     const button = new ButtonBuilder()
-      .setCustomId('create_ticket')
+      .setCustomId(`create_ticket_${panelId}`)
       .setLabel(buttonLabel || 'Ticket erstellen')
       .setStyle(ButtonStyle[buttonStyle] || ButtonStyle.Primary)
       .setEmoji('📩');
@@ -182,133 +195,264 @@ app.post('/api/tickets/create-panel', async (req, res) => {
   }
 });
 
-// --- MODERATION API (BAN, KICK, WARN, TIMEOUT) ---
+// --- DISCORD SLASH COMMANDS REGISTRIERUNG ---
 
-app.post('/api/moderation/action', async (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Nicht angemeldet' });
+const commands = [
+  new SlashCommandBuilder()
+    .setName('add')
+    .setDescription('Fügt einen Benutzer zum Ticket-Thread hinzu')
+    .addUserOption(opt => opt.setName('user').setDescription('Der hinzuzufügende Benutzer').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('remove')
+    .setDescription('Entfernt einen Benutzer aus dem Ticket-Thread')
+    .addUserOption(opt => opt.setName('user').setDescription('Der zu entfernende Benutzer').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('unclaim')
+    .setDescription('Gibt ein beanspruchtes Ticket wieder frei'),
+  new SlashCommandBuilder()
+    .setName('transfer')
+    .setDescription('Überträgt das Ticket an ein anderes Teammitglied')
+    .addUserOption(opt => opt.setName('user').setDescription('Das neue Teammitglied').setRequired(true))
+].map(cmd => cmd.toJSON());
 
-  const { guildId, userId, action, reason } = req.body;
-
-  try {
-    const guild = await client.guilds.fetch(guildId);
-    if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
-
-    const member = await guild.members.fetch(userId).catch(() => null);
-
-    if (action === 'ban') {
-      await guild.members.ban(userId, { reason: reason || 'Über Dashboard gebannt' });
-      return res.json({ success: true, message: `Benutzer ${userId} wurde gebannt.` });
-    }
-
-    if (!member) return res.status(404).json({ error: 'Benutzer ist nicht auf diesem Server.' });
-
-    if (action === 'kick') {
-      await member.kick(reason || 'Über Dashboard gekickt');
-      return res.json({ success: true, message: `Benutzer ${member.user.tag} wurde gekickt.` });
-    }
-
-    if (action === 'timeout') {
-      await member.timeout(60 * 60 * 1000, reason || '1 Stunde Timeout über Dashboard');
-      return res.json({ success: true, message: `Benutzer ${member.user.tag} für 1 Std ins Timeout versetzt.` });
-    }
-
-    if (action === 'warn') {
-      // Sendet eine Verwarnung per Direktnachricht
-      await member.send(`⚠️ **Verwarnung von ${guild.name}:** ${reason || 'Kein Grund angegeben.'}`).catch(() => {});
-      return res.json({ success: true, message: `Verwarnung an ${member.user.tag} gesendet.` });
-    }
-
-    res.status(400).json({ error: 'Ungültige Aktion' });
-  } catch (err) {
-    console.error('[Moderation Action Error]', err);
-    res.status(500).json({ error: 'Aktion konnte nicht ausgeführt werden. Prüfe Bot-Rechte!' });
-  }
-});
-
-// --- DISCORD INTERAKTIONEN (CLAIM, CLOSE, CLOSE REQUEST) ---
+// --- DISCORD BOT EVENT HANDLING ---
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
 
-  // 1. Ticket Erstellen
-  if (interaction.customId === 'create_ticket') {
-    try {
-      const ticketChannel = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.username}`,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-        ]
+  // 1. MODAL ANZEIGEN WENN USER AUF TICKET-BUTTON KLICKT
+  if (interaction.isButton() && interaction.customId.startsWith('create_ticket_')) {
+    const panelId = interaction.customId.replace('create_ticket_', '');
+    const questions = panelQuestionsStore.get(panelId) || [];
+
+    if (questions.length > 0) {
+      const modal = new ModalBuilder()
+        .setCustomId(`ticket_modal_${panelId}`)
+        .setTitle('Ticket Fragen beantworten');
+
+      questions.slice(0, 5).forEach((qText, index) => {
+        const input = new TextInputBuilder()
+          .setCustomId(`q_${index}`)
+          .setLabel(qText.substring(0, 45))
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
       });
 
-      const claimBtn = new ButtonBuilder()
-        .setCustomId('claim_ticket')
-        .setLabel('Claim (Beanspruchen)')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('🙋‍♂️');
-
-      const closeReqBtn = new ButtonBuilder()
-        .setCustomId('request_close')
-        .setLabel('Close Request')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('⚠️');
-
-      const closeBtn = new ButtonBuilder()
-        .setCustomId('close_ticket')
-        .setLabel('Schließen')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('🔒');
-
-      const row = new ActionRowBuilder().addComponents(claimBtn, closeReqBtn, closeBtn);
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Ticket von ${interaction.user.username}`)
-        .setDescription('Willkommen! Ein Teammitglied wird sich in Kürze um dein Anliegen kümmern.')
-        .setColor('#5865F2');
-
-      await ticketChannel.send({ embeds: [embed], components: [row] });
-      await interaction.reply({ content: `Dein Ticket wurde erstellt: ${ticketChannel}`, flags: 64 });
-    } catch (err) {
-      console.error('[Ticket Create Error]', err);
-      await interaction.reply({ content: 'Fehler beim Erstellen des Tickets.', flags: 64 });
+      return await interaction.showModal(modal);
+    } else {
+      // Wenn keine Fragen definiert wurden, direkt Thread erstellen
+      return createTicketThread(interaction, []);
     }
   }
 
-  // 2. Ticket Beanspruchen (Claim)
-  if (interaction.customId === 'claim_ticket') {
-    const embed = new EmbedBuilder()
-      .setDescription(`🙋‍♂️ Dieses Ticket wurde von **${interaction.user.tag}** übernommen!`)
-      .setColor('#57F287');
+  // 2. MODAL SUBMIT (FRAGEN ABGESENDET)
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_modal_')) {
+    const panelId = interaction.customId.replace('ticket_modal_', '');
+    const questions = panelQuestionsStore.get(panelId) || [];
     
-    await interaction.reply({ embeds: [embed] });
+    const answers = questions.map((qText, index) => {
+      const ans = interaction.fields.getTextInputValue(`q_${index}`);
+      return { question: qText, answer: ans };
+    });
+
+    return createTicketThread(interaction, answers);
   }
 
-  // 3. Schließen anfragen (Close Request)
-  if (interaction.customId === 'request_close') {
-    const confirmBtn = new ButtonBuilder()
-      .setCustomId('close_ticket')
-      .setLabel('Jetzt Schließen')
-      .setStyle(ButtonStyle.Danger);
+  // 3. BUTTON INTERAKTIONEN (CLAIM, CLOSE REQUEST, CLOSE, CANCEL)
+  if (interaction.isButton()) {
 
-    const row = new ActionRowBuilder().addComponents(confirmBtn);
+    // Claim
+    if (interaction.customId === 'claim_ticket') {
+      const embed = new EmbedBuilder()
+        .setDescription(`🙋‍♂️ Dieses Ticket wurde von **${interaction.user}** übernommen!`)
+        .setColor('#57F287');
+      return await interaction.reply({ embeds: [embed] });
+    }
 
-    const embed = new EmbedBuilder()
-      .setTitle('Löschantrag gestellt')
-      .setDescription(`⚠️ **${interaction.user.tag}** schlägt vor, dieses Ticket zu schließen. Bitte bestätigen!`)
-      .setColor('#FEE75C');
+    // Unclaim Button (Optional)
+    if (interaction.customId === 'unclaim_ticket') {
+      const embed = new EmbedBuilder()
+        .setDescription(`🔄 Das Ticket wurde von **${interaction.user}** wieder freigegeben!`)
+        .setColor('#FEE75C');
+      return await interaction.reply({ embeds: [embed] });
+    }
 
-    await interaction.reply({ embeds: [embed], components: [row] });
+    // Close Request stellen
+    if (interaction.customId === 'request_close') {
+      const thread = interaction.channel;
+      // Versuche den Ersteller des Threads/Tickets zu finden
+      const creatorId = thread.ownerId || interaction.user.id;
+
+      const acceptBtn = new ButtonBuilder()
+        .setCustomId('accept_close')
+        .setLabel('Akzeptieren & Schließen')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✅');
+
+      const rejectBtn = new ButtonBuilder()
+        .setCustomId('reject_close')
+        .setLabel('Offen lassen & Ablehnen')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('❌');
+
+      const row = new ActionRowBuilder().addComponents(acceptBtn, rejectBtn);
+
+      return await interaction.reply({
+        content: `⚠️ <@${creatorId}>, der Benutzer ${interaction.user} schlägt vor, dieses Ticket zu schließen!`,
+        components: [row]
+      });
+    }
+
+    // Close Request Akzeptieren
+    if (interaction.customId === 'accept_close') {
+      await interaction.reply('Das Ticket wird in 5 Sekunden geschlossen und archiviert...');
+      setTimeout(async () => {
+        if (interaction.channel.isThread()) {
+          await interaction.channel.setArchived(true).catch(() => {});
+        } else {
+          await interaction.channel.delete().catch(() => {});
+        }
+      }, 5000);
+      return;
+    }
+
+    // Close Request Ablehnen
+    if (interaction.customId === 'reject_close') {
+      await interaction.update({
+        content: `❌ Der Schließantrag wurde von ${interaction.user} abgelehnt. Das Ticket bleibt offen!`,
+        components: []
+      });
+      return;
+    }
+
+    // Direkt Schließen
+    if (interaction.customId === 'close_ticket') {
+      await interaction.reply('Das Ticket wird in 5 Sekunden geschlossen...');
+      setTimeout(async () => {
+        if (interaction.channel.isThread()) {
+          await interaction.channel.setArchived(true).catch(() => {});
+        } else {
+          await interaction.channel.delete().catch(() => {});
+        }
+      }, 5000);
+      return;
+    }
   }
 
-  // 4. Ticket Schließen
-  if (interaction.customId === 'close_ticket') {
-    await interaction.reply('Das Ticket wird in 5 Sekunden gelöscht...');
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+  // 4. SLASH COMMANDS IMPLEMENTIERUNG
+  if (interaction.isChatInputCommand()) {
+    const { commandName, options, channel } = interaction;
+
+    if (!channel.isThread()) {
+      return await interaction.reply({ content: 'Dieser Befehl kann nur in einem Ticket-Thread verwendet werden!', flags: 64 });
+    }
+
+    if (commandName === 'add') {
+      const user = options.getUser('user');
+      await channel.members.add(user.id);
+      return await interaction.reply({ content: `✅ ${user} wurde zum Ticket hinzugefügt.` });
+    }
+
+    if (commandName === 'remove') {
+      const user = options.getUser('user');
+      await channel.members.remove(user.id);
+      return await interaction.reply({ content: `🚪 ${user} wurde aus dem Ticket entfernt.` });
+    }
+
+    if (commandName === 'unclaim') {
+      const embed = new EmbedBuilder()
+        .setDescription(`🔄 Das Ticket wurde von ${interaction.user} freigegeben.`)
+        .setColor('#FEE75C');
+      return await interaction.reply({ embeds: [embed] });
+    }
+
+    if (commandName === 'transfer') {
+      const newUser = options.getUser('user');
+      await channel.members.add(newUser.id);
+      const embed = new EmbedBuilder()
+        .setDescription(`➡️ Ticket wurde an ${newUser} übertragen!`)
+        .setColor('#5865F2');
+      return await interaction.reply({ content: `${newUser}`, embeds: [embed] });
+    }
   }
 });
 
-client.once('ready', () => {
+// Hilfsfunktion zum Erstellen des Ticket-Threads
+async function createTicketThread(interaction, qAnswers = []) {
+  try {
+    const channel = interaction.channel;
+    const threadName = `ticket-${interaction.user.username}`;
+
+    // Erstelle einen Thread im aktuellen Textkanal
+    const thread = await channel.threads.create({
+      name: threadName,
+      autoArchiveDuration: 1440,
+      type: ChannelType.PrivateThread, // Versuche privaten Thread, sonst öffentlicher Fallback
+      reason: `Ticket für ${interaction.user.username}`
+    }).catch(async () => {
+      return await channel.threads.create({
+        name: threadName,
+        autoArchiveDuration: 1440,
+        type: ChannelType.PublicThread,
+        reason: `Ticket für ${interaction.user.username}`
+      });
+    });
+
+    await thread.members.add(interaction.user.id);
+
+    const claimBtn = new ButtonBuilder()
+      .setCustomId('claim_ticket')
+      .setLabel('Claim')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji('🙋‍♂️');
+
+    const closeReqBtn = new ButtonBuilder()
+      .setCustomId('request_close')
+      .setLabel('Close Request')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('⚠️');
+
+    const closeBtn = new ButtonBuilder()
+      .setCustomId('close_ticket')
+      .setLabel('Schließen')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji('🔒');
+
+    const row = new ActionRowBuilder().addComponents(claimBtn, closeReqBtn, closeBtn);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Ticket von ${interaction.user.username}`)
+      .setDescription(`Willkommen <@${interaction.user.id}>! Ein Teammitglied wird sich in Kürze um dein Anliegen kümmern.`)
+      .setColor('#5865F2');
+
+    if (qAnswers.length > 0) {
+      qAnswers.forEach(qa => {
+        embed.addFields({ name: `❓ ${qa.question}`, value: qa.answer || 'Keine Angabe' });
+      });
+    }
+
+    await thread.send({ content: `<@${interaction.user.id}>`, embeds: [embed], components: [row] });
+    await interaction.reply({ content: `Dein Ticket-Thread wurde erstellt: ${thread}`, flags: 64 });
+  } catch (err) {
+    console.error('[Create Thread Error]', err);
+    await interaction.reply({ content: 'Fehler beim Erstellen des Ticket-Threads.', flags: 64 });
+  }
+}
+
+client.once('ready', async () => {
   console.log(`[Discord] Bot ist online als ${client.user.tag}`);
+
+  // Slash Commands auf Discord registrieren
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log('[Discord] Slash Commands (/add, /remove, /unclaim, /transfer) erfolgreich registriert!');
+  } catch (err) {
+    console.error('[Slash Commands Error]', err);
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);

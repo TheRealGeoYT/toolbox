@@ -1,10 +1,22 @@
 let activeGuild = null;
 let currentUser = null;
 
-// Beim Start Nutzer & Verifizierungsstatus prüfen
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
   loadGuilds();
+  addQuestionInput('In welcher Angelegenheit benötigst du Hilfe?');
+});
+
+function toggleServerDropdown() {
+  const menu = document.getElementById('serverDropdownMenu');
+  if (menu) menu.classList.toggle('show');
+}
+
+window.addEventListener('click', (e) => {
+  if (!e.target.closest('.server-dropdown-container')) {
+    const menu = document.getElementById('serverDropdownMenu');
+    if (menu) menu.classList.remove('show');
+  }
 });
 
 async function checkAuth() {
@@ -17,15 +29,19 @@ async function checkAuth() {
 
     if (data.authenticated) {
       currentUser = data.user;
-      const verifiedBadge = data.isVerified ? ' <span class="verified-icon" title="Discord Account Verifiziert">☑️</span>' : '';
-      userInfoEl.innerHTML = `<strong>${currentUser.username}</strong>${verifiedBadge}`;
+      const avatarUrl = currentUser.avatar 
+        ? `https://cdn.discordapp.com/avatars/${currentUser.id}/${currentUser.avatar}.png` 
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      const verifiedBadge = data.isVerified ? ' <span class="verified-icon">☑️</span>' : '';
+      userInfoEl.innerHTML = `<img src="${avatarUrl}" class="user-avatar"> <strong>${currentUser.username}</strong>${verifiedBadge}`;
       authBtn.innerText = 'Abmelden';
     } else {
       userInfoEl.innerHTML = `<span>Nicht angemeldet</span>`;
       authBtn.innerText = 'Login';
     }
   } catch (err) {
-    console.error('Auth-Check fehlgeschlagen:', err);
+    console.error(err);
   }
 }
 
@@ -37,76 +53,81 @@ function handleAuth() {
   }
 }
 
-// Tab Wechsel
 function switchTab(tabName) {
-  ['servers', 'tickets', 'moderation'].forEach(tab => {
-    document.getElementById(`tab-${tab}`).classList.add('hidden');
-    document.getElementById(`btnNav${capitalize(tab)}`).classList.remove('active');
+  ['servers', 'tickets'].forEach(tab => {
+    const t = document.getElementById(`tab-${tab}`);
+    const b = document.getElementById(`btnNav${capitalize(tab)}`);
+    if (t) t.classList.add('hidden');
+    if (b) b.classList.remove('active');
   });
 
-  document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-  document.getElementById(`btnNav${capitalize(tabName)}`).classList.add('active');
+  const targetTab = document.getElementById(`tab-${tabName}`);
+  const targetBtn = document.getElementById(`btnNav${capitalize(tabName)}`);
+  if (targetTab) targetTab.classList.remove('hidden');
+  if (targetBtn) targetBtn.classList.add('active');
 }
 
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Server Laden
 async function loadGuilds() {
   const container = document.getElementById('serverList');
+  const dropdownMenu = document.getElementById('serverDropdownMenu');
+
   try {
     const res = await fetch('/api/guilds');
     const guilds = await res.json();
 
     if (!Array.isArray(guilds)) {
-      container.innerHTML = '<p>Bitte zuerst mit Discord anmelden!</p>';
+      container.innerHTML = '<p>Bitte zuerst oben rechts mit Discord anmelden!</p>';
       return;
     }
 
     container.innerHTML = '';
-    guilds.forEach(guild => {
+    dropdownMenu.innerHTML = '';
+
+    guilds.forEach((guild, index) => {
+      const iconUrl = guild.icon || '';
+      
       const card = document.createElement('div');
       card.className = 'server-card';
       card.onclick = () => selectGuild(guild);
-
-      const iconUrl = guild.icon || '';
       card.innerHTML = `
-        <div class="server-avatar" style="margin: 0 auto 10px;">
-          ${iconUrl ? `<img src="${iconUrl}">` : guild.name.charAt(0)}
-        </div>
+        <div class="server-avatar" style="margin: 0 auto 10px;">${iconUrl ? `<img src="${iconUrl}">` : guild.name.charAt(0)}</div>
         <h4>${guild.name}</h4>
-        <small style="color: ${guild.hasBot ? '#10b981' : '#f59e0b'}">
-          ${guild.hasBot ? '● Bot vorhanden' : '○ Bot fehlt'}
-        </small>
       `;
       container.appendChild(card);
+
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.onclick = () => { selectGuild(guild); toggleServerDropdown(); };
+      item.innerHTML = `
+        <div class="server-avatar">${iconUrl ? `<img src="${iconUrl}">` : guild.name.charAt(0)}</div>
+        <div><strong>${guild.name}</strong></div>
+      `;
+      dropdownMenu.appendChild(item);
+
+      if (index === 0 && !activeGuild) selectGuild(guild, false);
     });
   } catch (err) {
-    container.innerHTML = '<p>Fehler beim Laden der Server.</p>';
+    container.innerHTML = '<p>Fehler beim Laden.</p>';
   }
 }
 
-// Server Auswählen
-function selectGuild(guild) {
+function selectGuild(guild, autoSwitch = true) {
   activeGuild = guild;
-
-  // Sidebar Aktualisieren
   document.getElementById('sidebarServerName').innerText = guild.name;
-  document.getElementById('sidebarServerStatus').innerText = guild.hasBot ? 'Aktiv' : 'Bot einladen';
+  document.getElementById('sidebarServerStatus').innerText = 'Aktiv';
   
   const iconEl = document.getElementById('sidebarServerIcon');
-  if (guild.icon) {
-    iconEl.innerHTML = `<img src="${guild.icon}">`;
-  } else {
-    iconEl.innerText = guild.name.charAt(0);
-  }
+  if (guild.icon) iconEl.innerHTML = `<img src="${guild.icon}">`;
+  else iconEl.innerText = guild.name.charAt(0);
 
   loadChannels(guild.id);
-  switchTab('tickets');
+  if (autoSwitch) switchTab('tickets');
 }
 
-// Kanäle Laden
 async function loadChannels(guildId) {
   const select = document.getElementById('ticketChannelSelect');
   select.innerHTML = '<option>Lade Kanäle...</option>';
@@ -114,35 +135,44 @@ async function loadChannels(guildId) {
   try {
     const res = await fetch(`/api/guilds/${guildId}/channels`);
     const channels = await res.json();
-
     select.innerHTML = '';
-    channels.forEach(ch => {
-      select.innerHTML += `<option value="${ch.id}"># ${ch.name}</option>`;
-    });
+    channels.forEach(ch => select.innerHTML += `<option value="${ch.id}"># ${ch.name}</option>`);
   } catch (err) {
-    select.innerHTML = '<option>Konnte Kanäle nicht laden</option>';
+    select.innerHTML = '<option>Fehler beim Laden</option>';
   }
 }
 
-// Ticket Templates (Vorlagen)
+// Dynamische Fragen hinzufügen
+function addQuestionInput(defaultText = '') {
+  const container = document.getElementById('questionsContainer');
+  const count = container.children.length;
+  if (count >= 5) return alert('Maximal 5 Fragen erlaubt!');
+
+  const row = document.createElement('div');
+  row.className = 'question-row';
+  row.innerHTML = `
+    <input type="text" class="question-input" placeholder="z. B. Wie lautet dein Ingame Name?" value="${defaultText}">
+    <button class="btn btn-danger" onclick="this.parentElement.remove()">X</button>
+  `;
+  container.appendChild(row);
+}
+
+// Templates anwenden
 function applyTemplate() {
   const template = document.getElementById('ticketTemplate').value;
-  const title = document.getElementById('panelTitle');
-  const desc = document.getElementById('panelDesc');
-  const label = document.getElementById('buttonLabel');
+  const container = document.getElementById('questionsContainer');
+  container.innerHTML = '';
 
   if (template === 'support') {
-    title.value = '🛠️ Allgemeine Support-Anfrage';
-    desc.value = 'Benötigst du Hilfe auf unserem Server? Klicke unten, um ein privates Ticket mit dem Team zu starten.';
-    label.value = 'Support anfordern';
+    document.getElementById('panelTitle').value = '🛠️ Support Ticket';
+    addQuestionInput('Beschreibe dein Anliegen:');
   } else if (template === 'apply') {
-    title.value = '📝 Team-Bewerbungen';
-    desc.value = 'Möchtest du dich als Moderator oder Entwickler bewerben? Erstelle ein Bewerbungsticket!';
-    label.value = 'Jetzt bewerben';
+    document.getElementById('panelTitle').value = '📝 Team Bewerbung';
+    addQuestionInput('Wie alt bist du?');
+    addQuestionInput('Warum möchtest du ins Team?');
   } else if (template === 'bug') {
-    title.value = '🐛 Bug / Fehler melden';
-    desc.value = 'Hast du einen Fehler gefunden? Beschreibe ihn im Ticket so genau wie möglich!';
-    label.value = 'Fehler melden';
+    document.getElementById('panelTitle').value = '🐛 Bug Report';
+    addQuestionInput('Welcher Fehler ist aufgetreten?');
   }
 }
 
@@ -150,38 +180,19 @@ function applyTemplate() {
 async function sendTicketPanel() {
   if (!activeGuild) return alert('Bitte wähle zuerst einen Server aus!');
 
+  const questionInputs = document.querySelectorAll('.question-input');
+  const questions = Array.from(questionInputs).map(i => i.value).filter(v => v.trim() !== '');
+
   const body = {
     channelId: document.getElementById('ticketChannelSelect').value,
     title: document.getElementById('panelTitle').value,
     description: document.getElementById('panelDesc').value,
     buttonLabel: document.getElementById('buttonLabel').value,
-    buttonStyle: 'Primary'
+    buttonStyle: 'Primary',
+    questions: questions
   };
 
   const res = await fetch('/api/tickets/create-panel', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-
-  const data = await res.json();
-  alert(data.message || data.error);
-}
-
-// Moderations-Aktion Ausführen
-async function executeModAction() {
-  if (!activeGuild) return alert('Bitte wähle zuerst einen Server aus!');
-
-  const body = {
-    guildId: activeGuild.id,
-    userId: document.getElementById('modUserId').value,
-    action: document.getElementById('modAction').value,
-    reason: document.getElementById('modReason').value
-  };
-
-  if (!body.userId) return alert('Bitte eine Discord User ID eingeben!');
-
-  const res = await fetch('/api/moderation/action', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
